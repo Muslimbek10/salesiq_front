@@ -1,7 +1,7 @@
 # ============================================================
 # Frontend Dockerfile — React + Vite (Production)
 # Stage 1: Build the app
-# Stage 2: Serve with lightweight static server
+# Stage 2: Serve with nginx
 # ============================================================
 
 # --- Build Stage ---
@@ -20,14 +20,20 @@ COPY . .
 RUN npm run build
 
 # --- Serve Stage ---
-FROM node:20-alpine
+FROM nginx:alpine
 
-RUN npm install -g serve
+COPY --from=builder /app/dist /usr/share/nginx/html
 
-WORKDIR /app
+# nginx config: serve SPA, listen on $PORT
+RUN printf 'server {\n\
+    listen $PORT;\n\
+    root /usr/share/nginx/html;\n\
+    index index.html;\n\
+    location / {\n\
+        try_files $uri $uri/ /index.html;\n\
+    }\n\
+}\n' > /etc/nginx/templates/default.conf.template
 
-COPY --from=builder /app/dist ./dist
+EXPOSE 80
 
-EXPOSE 3000
-
-CMD ["sh", "-c", "serve -s dist -l tcp://0.0.0.0:${PORT:-3000}"]
+CMD ["/bin/sh", "-c", "PORT=${PORT:-80} envsubst '$PORT' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
